@@ -51,7 +51,6 @@
             Bal: {{ formatBalance(runningBalanceValue) }} {{ transactionCurrency }}
           </div>
           <transaction-list-item-hero-icon v-if="props.isDetailedMode" :value="props.value" />
-        </div>
             <div class="display-flex flex-column align-items-end text-size-12 gap-1 line-height-normal mt-1">
               <div>{{ dateFormatted }}</div>
               <div class="text-muted">{{ timeAgo }}</div>
