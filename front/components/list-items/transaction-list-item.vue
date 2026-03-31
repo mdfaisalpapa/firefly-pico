@@ -7,56 +7,55 @@
             <div v-if="isSplitPayment && props.isDetailedMode" class="mt-1 display-flex">
               <transaction-split-badge />
             </div>
-
             <div class="flex-center-vertical gap-1">
               <div v-if="description" class="list-item-title max-2-lines word-break-word">{{ description }}</div>
               <app-icon v-if="hasAttachments" :icon="TablerIconConstants.attachment" :size="20" color="#1E88E5" />
             </div>
-
             <div class="flex-column" :style="getStyleForField(transactionListField.accounts)">
               <div v-for="displayedAccount in displayedAccounts" class="list-item-subtitle">
                 <app-icon :icon="Account.getIcon(displayedAccount) ?? TablerIconConstants.account" :size="20" />
                 <span>{{ Account.getDisplayName(displayedAccount) }}</span>
               </div>
             </div>
-
             <div v-if="categories && props.isDetailedMode" class="list-item-subtitle gap-2" :style="getStyleForField(transactionListField.category)">
               <div v-for="category in categories">
                 <app-icon :icon="Category.getIcon(category) ?? TablerIconConstants.category" :size="20" />
                 {{ Category.getDisplayName(category) }}
               </div>
             </div>
-
             <div v-if="notes && props.isDetailedMode" class="list-item-subtitle" :style="getStyleForField(transactionListField.notes)">
               <app-icon :icon="TablerIconConstants.fieldText1" :size="20" />
               <span class="notes-markdown max-2-lines word-break-word" v-html="notes" />
             </div>
-
             <div v-if="tags && props.isDetailedMode" class="tags-container" :style="getStyleForField(transactionListField.tags)">
               <div v-for="tag in visibleTags" class="tag">
                 <app-icon :icon="Tag.getIcon(tag) ?? TablerIconConstants.tag" :size="14" />
                 <div class="list-item-subtitle ml-5">{{ Tag.getDisplayNameEllipsized(tag, 10) }}</div>
               </div>
             </div>
-
             <div v-if="budget && props.isDetailedMode" class="list-item-subtitle" :style="getStyleForField(transactionListField.budget)">
               <app-icon :icon="TablerIconConstants.budget" :size="20" />
               {{ Budget.getDisplayName(budget) }}
             </div>
           </div>
 
-        <div class="third_column">
-          <div class="font-weight-700 text-size-14" :style="amountStyle">{{ transactionAmount }} {{ transactionCurrency }}</div>
-          <div v-if="runningBalanceValue" class="font-weight-700 text-size-14 text-right line-height-normal mt-1" :style="balanceStyle">
-            Bal: {{ formatBalance(runningBalanceValue) }} {{ transactionCurrency }}
-          </div>
-          <transaction-list-item-hero-icon v-if="props.isDetailedMode" :value="props.value" />
+          <div class="third_column">
+            <div class="font-weight-700 text-size-14" :style="amountStyle">
+              {{ transactionAmount }} {{ transactionCurrency }}
+            </div>
+            
+            <div v-if="runningBalanceValue !== null" 
+                 class="font-weight-700 text-size-14 text-right line-height-normal mt-1" 
+                 :style="balanceStyle">
+              Bal: {{ formatBalance(runningBalanceValue) }} {{ transactionCurrency }}
+            </div>
+
+            <transaction-list-item-hero-icon v-if="props.isDetailedMode" :value="props.value" />
+
             <div class="display-flex flex-column align-items-end text-size-12 gap-1 line-height-normal mt-1">
               <div>{{ dateFormatted }}</div>
               <div class="text-muted">{{ timeAgo }}</div>
             </div>
-
-            <div class="flex-center-vertical text-muted text-size-12 gap-1"></div>
           </div>
         </div>
       </template>
@@ -85,22 +84,19 @@ import { transactionListField } from '~/constants/TransactionConstants.js'
 import { marked } from 'marked'
 import { formatTimeAgo } from '@vueuse/core'
 import { IconPhoto } from '@tabler/icons-vue'
-const route = useRoute();
+
 const props = defineProps({
   value: Object,
-  isDetailedMode: {
-    default: true,
-  },
+  isDetailedMode: { default: true },
 })
 
 const dataStore = useDataStore()
-
+const route = useRoute() // Detects the active account filter
 const emit = defineEmits(['onEdit', 'onDelete'])
 
 const transactions = computed(() => get(props.value, 'attributes.transactions', []))
 const firstTransaction = computed(() => head(transactions.value))
 const transactionType = computed(() => get(firstTransaction.value, 'type', ' - '))
-
 const isSplitPayment = computed(() => transactions.value.length > 1)
 
 const displayedAccounts = computed(() => {
@@ -110,72 +106,51 @@ const displayedAccounts = computed(() => {
 const description = computed(() => get(props.value, 'attributes.group_title') ?? get(firstTransaction.value, 'description') ?? ' - ')
 const hasAttachments = computed(() => transactions.value.some((item) => item.has_attachments))
 
-const categories = computed(() => {
-  return transactions.value
-    .map((item) => item.category)
-    .flat()
-    .filter(Boolean)
-    .uniqBy('id')
-})
+const categories = computed(() => transactions.value.map((item) => item.category).flat().filter(Boolean).uniqBy('id'))
 const notes = computed(() => {
   let result = get(firstTransaction.value, 'notes')
   return result ? marked(result) : null
 })
 
-const tags = computed(() => {
-  return transactions.value
-    .map((item) => item.tags)
-    .flat()
-    .filter(Boolean)
-    .uniqBy('id')
-})
-
+const tags = computed(() => transactions.value.map((item) => item.tags).flat().filter(Boolean).uniqBy('id'))
 const budget = computed(() => get(firstTransaction.value, 'budget'))
-
 const isTodo = computed(() => tags.value.some((tag) => get(tag, 'attributes.is_todo')))
-const cellClass = computed(() => ({
-  'transaction-list-item-todo': isTodo.value,
-}))
-// Clean Logic for Balance, Styling, and Formatting
+const cellClass = computed(() => ({ 'transaction-list-item-todo': isTodo.value }))
+
+/**
+ * Smart Balance Logic:
+ * Automatically selects the balance of the account you are currently viewing.
+ */
 const runningBalanceValue = computed(() => {
   const trans = firstTransaction.value;
-  const currentViewedAccountId = route.params.id; // Detects the account you are viewing in the list
+  // Detect account ID from either the URL path or the search filters
+  const currentAccountId = route.params.id || route.query.account_id;
 
-  // 1. If we are viewing a specific account, show THAT account's balance
-  if (currentViewedAccountId) {
-    if (get(trans, 'source_id') == currentViewedAccountId) {
-      return get(trans, 'source_balance_after');
-    }
-    if (get(trans, 'destination_id') == currentViewedAccountId) {
-      return get(trans, 'destination_balance_after');
-    }
+  if (currentAccountId) {
+    if (get(trans, 'source_id') == currentAccountId) return get(trans, 'source_balance_after');
+    if (get(trans, 'destination_id') == currentAccountId) return get(trans, 'destination_balance_after');
   }
 
-  // 2. Fallback for the global "All Transactions" list
-  if (isTypeIncome.value || isTypeTransfer.value) {
-    return get(trans, 'destination_balance_after');
-  }
-  return get(trans, 'source_balance_after');
+  // Fallback for general list
+  return (isTypeIncome.value || isTypeTransfer.value) 
+    ? get(trans, 'destination_balance_after') 
+    : get(trans, 'source_balance_after');
 });
 
 const balanceStyle = computed(() => {
   const val = parseFloat(runningBalanceValue.value || 0);
-  // Green for positive, Red for negative using theme variables
   return val >= 0 ? 'color: var(--income1)' : 'color: var(--expense2)';
 });
 
 const formatBalance = (value) => {
   if (value === null || value === undefined) return '0.00';
-  // Fixes the decimal overflow and forces exactly 2 decimal places
   return parseFloat(value).toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
 };
-  const visibleTags = computed(() => {
-  return tags.value.slice(0, 4)
-})
 
+const visibleTags = computed(() => tags.value.slice(0, 4))
 const amountSign = computed(() => (isTypeExpense.value ? '-' : isTypeIncome.value ? '+' : ''))
 const transactionAmount = computed(() => `${amountSign.value}${Transaction.getAmountFormatted(props.value)}`)
 const transactionCurrency = computed(() => get(firstTransaction.value, 'currency_symbol', ' - '))
@@ -186,47 +161,25 @@ const isTypeTransfer = computed(() => isEqual(transactionType.value, Transaction
 
 const date = computed(() => DateUtils.autoToDate(get(firstTransaction.value, 'date')))
 const dateFormatted = computed(() => DateUtils.dateToUI(date.value))
-const dayOfWeek = computed(() => DateUtils.dateToString(date.value, 'EEEEEE'))
 const timeAgo = computed(() => capitalize(formatTimeAgo(date.value)))
 
-const destinationAccount = computed(() => {
-  let destinationId = get(firstTransaction.value, 'destination_id')
-  return get(dataStore.accountDictionary, destinationId)
-})
-
-const sourceAccount = computed(() => {
-  let sourceId = get(firstTransaction.value, 'source_id')
-  return get(dataStore.accountDictionary, sourceId)
-})
+const destinationAccount = computed(() => get(dataStore.accountDictionary, get(firstTransaction.value, 'destination_id')))
+const sourceAccount = computed(() => get(dataStore.accountDictionary, get(firstTransaction.value, 'source_id')))
 
 const profileStore = useProfileStore()
 const getStyleForField = ({ code }) => {
   let position = profileStore.transactionListFieldsConfig.findIndex((item) => item.code === code)
   let field = profileStore.transactionListFieldsConfig.find((item) => item.code === code)
-  let isVisible = field ? field.isVisible : true
-  let displayStyle = isVisible ? '' : 'display: none'
-
-  return `order: ${position}; ${displayStyle}`
+  return `order: ${position}; ${field?.isVisible === false ? 'display: none' : ''}`
 }
 
-const onEdit = async (e) => {
-  emit('onEdit', props.value)
-}
-
-const onDelete = async () => {
-  emit('onDelete', props.value)
-}
+const onEdit = async (e) => { emit('onEdit', props.value) }
+const onDelete = async () => { emit('onDelete', props.value) }
 
 const amountStyle = computed(() => {
-  if (isTypeExpense.value) {
-    return `color: var(--expense2)`
-  }
-  if (isTypeIncome.value) {
-    return `color: var(--income1)`
-  }
-  if (isTypeTransfer.value) {
-    return `color: var(--transfer1)`
-  }
+  if (isTypeExpense.value) return `color: var(--expense2)`
+  if (isTypeIncome.value) return `color: var(--income1)`
+  if (isTypeTransfer.value) return `color: var(--transfer1)`
 })
 
 const swipeCell = ref(null)
