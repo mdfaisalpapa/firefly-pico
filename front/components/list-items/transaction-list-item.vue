@@ -85,7 +85,7 @@ import { transactionListField } from '~/constants/TransactionConstants.js'
 import { marked } from 'marked'
 import { formatTimeAgo } from '@vueuse/core'
 import { IconPhoto } from '@tabler/icons-vue'
-
+const route = useRoute();
 const props = defineProps({
   value: Object,
   isDetailedMode: {
@@ -139,11 +139,22 @@ const cellClass = computed(() => ({
 // Clean Logic for Balance, Styling, and Formatting
 const runningBalanceValue = computed(() => {
   const trans = firstTransaction.value;
-  // If it's a Transfer or Income, show the balance of the account receiving money
+  const currentViewedAccountId = route.params.id; // Detects the account you are viewing in the list
+
+  // 1. If we are viewing a specific account, show THAT account's balance
+  if (currentViewedAccountId) {
+    if (get(trans, 'source_id') == currentViewedAccountId) {
+      return get(trans, 'source_balance_after');
+    }
+    if (get(trans, 'destination_id') == currentViewedAccountId) {
+      return get(trans, 'destination_balance_after');
+    }
+  }
+
+  // 2. Fallback for the global "All Transactions" list
   if (isTypeIncome.value || isTypeTransfer.value) {
     return get(trans, 'destination_balance_after');
   }
-  // For Expenses, show the balance of the source account
   return get(trans, 'source_balance_after');
 });
 
