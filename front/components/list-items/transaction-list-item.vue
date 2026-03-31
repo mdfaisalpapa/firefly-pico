@@ -45,12 +45,13 @@
             </div>
           </div>
 
-          <div class="third_column">
-            <div class="font-weight-700 text-size-14" :style="amountStyle">{{ transactionAmount }} {{ transactionCurrency }}</div>
-            <div v-if="runningBalanceValue" class="font-weight-700 text-size-14 text-right line-height-normal mt-1" :style="balanceStyle">
-              Bal: {{ formatBalance(runningBalanceValue) }} {{ transactionCurrency }}
-            </div>
-            <transaction-list-item-hero-icon v-if="props.isDetailedMode" :value="props.value" />
+        <div class="third_column">
+          <div class="font-weight-700 text-size-14" :style="amountStyle">{{ transactionAmount }} {{ transactionCurrency }}</div>
+          <div v-if="runningBalanceValue" class="font-weight-700 text-size-14 text-right line-height-normal mt-1" :style="balanceStyle">
+            Bal: {{ formatBalance(runningBalanceValue) }} {{ transactionCurrency }}
+          </div>
+          <transaction-list-item-hero-icon v-if="props.isDetailedMode" :value="props.value" />
+        </div>
             <div class="display-flex flex-column align-items-end text-size-12 gap-1 line-height-normal mt-1">
               <div>{{ dateFormatted }}</div>
               <div class="text-muted">{{ timeAgo }}</div>
@@ -136,42 +137,32 @@ const isTodo = computed(() => tags.value.some((tag) => get(tag, 'attributes.is_t
 const cellClass = computed(() => ({
   'transaction-list-item-todo': isTodo.value,
 }))
-// Replace your current runningBalanceValue with this smarter logic
-// 1. Dynamic styling for Green (Positive) or Red (Negative)
-const balanceStyle = computed(() => {
-  const val = parseFloat(runningBalanceValue.value || 0);
-  // Using Firefly-Pico's internal variables for consistent UI colors
-  return val >= 0 ? 'color: var(--income1)' : 'color: var(--expense2)';
-});
-
-// 2. Refined formatting to fix the decimal overflow seen in your screenshot
-const formatBalance = (value) => {
-  if (value === null || value === undefined) return '0.00';
-  return parseFloat(value).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
-};
-
-// 3. Ensure your existing runningBalanceValue handles transfers correctly
+// Clean Logic for Balance, Styling, and Formatting
 const runningBalanceValue = computed(() => {
   const trans = firstTransaction.value;
-  // For Income and Transfers, show the destination account balance
+  // If it's a Transfer or Income, show the balance of the account receiving money
   if (isTypeIncome.value || isTypeTransfer.value) {
     return get(trans, 'destination_balance_after');
   }
-  // For Expenses, show the source account balance
+  // For Expenses, show the balance of the source account
   return get(trans, 'source_balance_after');
 });
-// Add this helper function to clean up the long decimals
+
+const balanceStyle = computed(() => {
+  const val = parseFloat(runningBalanceValue.value || 0);
+  // Green for positive, Red for negative using theme variables
+  return val >= 0 ? 'color: var(--income1)' : 'color: var(--expense2)';
+});
+
 const formatBalance = (value) => {
-  if (!value) return '0.00';
+  if (value === null || value === undefined) return '0.00';
+  // Fixes the decimal overflow and forces exactly 2 decimal places
   return parseFloat(value).toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
 };
-const visibleTags = computed(() => {
+  const visibleTags = computed(() => {
   return tags.value.slice(0, 4)
 })
 
