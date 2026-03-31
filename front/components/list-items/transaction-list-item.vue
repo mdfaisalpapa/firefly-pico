@@ -48,8 +48,11 @@
           <div class="third_column">
             <div class="font-weight-700 text-size-14" :style="amountStyle">{{ transactionAmount }} {{ transactionCurrency }}</div>
 
-            <transaction-list-item-hero-icon v-if="props.isDetailedMode" :value="props.value" />
+            <div v-if="runningBalanceValue" class="text-size-10 text-muted text-right line-height-normal">
+              Bal: {{ runningBalanceValue }} {{ transactionCurrency }}
+            </div>
 
+            <transaction-list-item-hero-icon v-if="props.isDetailedMode" :value="props.value" />
             <div class="display-flex flex-column align-items-end text-size-12 gap-1 line-height-normal mt-1">
               <div>{{ dateFormatted }}</div>
               <div class="text-muted">{{ timeAgo }}</div>
@@ -135,7 +138,27 @@ const isTodo = computed(() => tags.value.some((tag) => get(tag, 'attributes.is_t
 const cellClass = computed(() => ({
   'transaction-list-item-todo': isTodo.value,
 }))
+// Replace your current runningBalanceValue with this smarter logic
+const runningBalanceValue = computed(() => {
+  const trans = firstTransaction.value;
+  
+  // If it's a Transfer or Income, we usually want to see the Destination account balance
+  if (isTypeIncome.value || isTypeTransfer.value) {
+    return get(trans, 'destination_balance_after');
+  }
+  
+  // For Expenses, we want to see the Source account balance
+  return get(trans, 'source_id') ? get(trans, 'source_balance_after') : get(trans, 'destination_balance_after');
+});
 
+// Add this helper function to clean up the long decimals
+const formatBalance = (value) => {
+  if (!value) return '0.00';
+  return parseFloat(value).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+};
 const visibleTags = computed(() => {
   return tags.value.slice(0, 4)
 })
